@@ -58,8 +58,9 @@ module Data.XML.DTD.Parse
 import Data.XML.DTD.Types
 import Data.XML.Types (ExternalID(PublicID, SystemID),
   Instruction(Instruction))
-import Data.Attoparsec.Text (Parser, try, space, skipSpace, takeTill,
+import Data.Attoparsec.Text (Parser, try, satisfy, takeTill,
   anyChar, char, digit, (<*.), (.*>))
+import qualified Data.Attoparsec.Text as A -- for takeWhile
 import Data.Attoparsec.Combinator (many, manyTill, choice, sepBy1)
 import Data.Functor ((<$>))
 import Control.Applicative (pure, optional, (<*>), (<*), (*>), (<|>))
@@ -70,26 +71,26 @@ import qualified Data.Text as T
 
 -- | Parse a 'DTD', possibly preceded by white space.
 parseDTD :: Parser DTD
-parseDTD = DTD <$> (skipSpace *> optional (try textDecl <* skipSpace)) <*>
-                   many (dtdComponent <* skipSpace)
+parseDTD = DTD <$> (skipWS *> optional (try textDecl <* skipWS)) <*>
+                   many (dtdComponent <* skipWS)
 
 -- | Parse an @?xml@ text declaration at the beginning of a 'DTD'.
 textDecl :: Parser DTDTextDecl
 textDecl = do
-    "<?" .*> xml .*> space *> skipSpace
+    "<?" .*> xml .*> ws *> skipWS
     enc1 <- optional $ try encoding
     ver  <- optional $ try (maybeSpace version enc1)
     enc  <- maybe (maybeSpace encoding ver) return enc1
-    skipSpace *> "?>" .*> pure (DTDTextDecl ver enc)
+    skipWS *> "?>" .*> pure (DTDTextDecl ver enc)
   where
     xml = ("X" <|> "x") .*> ("M" <|> "m") .*> ("L" <|> "l")
     version = attr "version" $ const versionNum
     versionNum = T.append <$> "1." <*> (T.singleton <$> digit)
     encoding = attr "encoding" $ takeTill . (==)
     attr name val = try (attrQ '"' name val) <|> attrQ '\'' name val
-    attrQ q name val = name .*> skipSpace *> "=" .*> skipSpace *>
+    attrQ q name val = name .*> skipWS *> "=" .*> skipWS *>
                        char q *> val q <* char q
-    maybeSpace p = maybe p (const $ space *> skipSpace *> p)
+    maybeSpace p = maybe p (const $ ws *> skipWS *> p)
 
 -- | Parse a single component of a 'DTD'. Conditional sections are
 -- currently not supported.
@@ -107,7 +108,7 @@ dtdComponent = choice $ map try
 
 -- | Parse a processing instruction.
 instruction :: Parser Instruction
-instruction = Instruction <$> ("<?" .*> skipSpace *> nameSS) <*>
+instruction = Instruction <$> ("<?" .*> skipWS *> nameSS) <*>
                               idata <*. "?>"
   where
     idata = T.concat . concat <$> manyTillS chunk "?>"
@@ -116,10 +117,10 @@ instruction = Instruction <$> ("<?" .*> skipSpace *> nameSS) <*>
 
 -- | Parse an entity declaration.
 entityDecl :: Parser EntityDecl
-entityDecl = "<!ENTITY " .*> skipSpace *>
+entityDecl = "<!ENTITY" .*> ws *> skipWS *>
                 choice [try internalParam, try externalParam,
                         try internalGen,   externalGen]
-              <* skipSpace <*. ">"
+              <* skipWS <*. ">"
   where
     internalParam = InternalParameterEntityDecl <$>
                       (param *> nameSS) <*> entityValue
@@ -128,8 +129,8 @@ entityDecl = "<!ENTITY " .*> skipSpace *>
     internalGen = InternalGeneralEntityDecl <$> nameSS <*> entityValue
     externalGen = ExternalGeneralEntityDecl <$>
                     nameSS <*> externalID <*> optional (try ndata)
-    param = "% " .*> skipSpace
-    ndata = skipSpace *> "NDATA " .*> skipSpace *> name
+    param = "%" .*> ws *> skipWS
+    ndata = skipWS *> "NDATA" .*> ws *> skipWS *> name
 
 -- | Parse a DTD name. We are much more liberal than the spec: we
 -- allow any characters that will not interfere with other DTD
@@ -147,7 +148,7 @@ name = nonNull $ takeTill notNameChar
 
 -- | Parse a DTD 'name' followed by optional white space.
 nameSS :: Parser Text
-nameSS = name <* skipSpace
+nameSS = name <* skipWS
 
 -- | Parse an entity value. An entity value is a quoted string
 -- possibly containing parameter entity references.
@@ -164,8 +165,8 @@ pERef = "%" .*> name <*. ";"
 
 -- | Parse the declaration of an element.
 elementDecl :: Parser ElementDecl
-elementDecl = ElementDecl <$> ("<!ELEMENT " .*> skipSpace *> nameSS) <*>
-                              contentDecl <* skipSpace <*. ">"
+elementDecl = ElementDecl <$> ("<!ELEMENT" .*> ws *> skipWS *> nameSS) <*>
+                              contentDecl <* skipWS <*. ">"
 
 -- | Parse the content that can occur in an element.
 contentDecl :: Parser ContentDecl
@@ -177,9 +178,9 @@ contentDecl = choice $ map try
     [      ContentElement <$> contentModel
     ]
   where
-    pcdata = "(" .*> skipSpace *> "#PCDATA" .*> skipSpace *>
+    pcdata = "(" .*> skipWS *> "#PCDATA" .*> skipWS *>
              (try tags <|> noTagsNoStar)
-    tags = many ("|" .*> skipSpace *> nameSS) <*. ")*"
+    tags = many ("|" .*> skipWS *> nameSS) <*. ")*"
     noTagsNoStar = ")" .*> pure []
 
 -- | Parse the model of structured content for an element.
@@ -189,8 +190,8 @@ contentModel = choice $ map (<*> repeatChar)
     , CMName   <$> name
     ]
   where
-    cmList sep = "(" .*> skipSpace *>
-      ((contentModel <* skipSpace) `sepBy1` (char sep *> skipSpace)) <*. ")"
+    cmList sep = "(" .*> skipWS *>
+      ((contentModel <* skipWS) `sepBy1` (char sep *> skipWS)) <*. ")"
 
 -- | Parse a repetition character.
 repeatChar :: Parser Repeat
@@ -203,13 +204,13 @@ repeatChar = choice
 
 -- | Parse a list of attribute declarations for an element.
 attrList :: Parser AttrList
-attrList = AttrList <$> ("<!ATTLIST " .*> skipSpace *> nameSS) <*>
+attrList = AttrList <$> ("<!ATTLIST" .*> ws *> skipWS *> nameSS) <*>
                         many attrDecl <*. ">"
 
 -- | Parse the three-part declaration of an attribute.
 attrDecl :: Parser AttrDecl
 attrDecl = AttrDecl <$>
-           nameSS <*> attrType <* skipSpace <*> attrDefault <* skipSpace
+           nameSS <*> attrType <* skipWS <*> attrDefault <* skipWS
 
 -- | Parse the type of an attribute.
 attrType :: Parser AttrType
@@ -228,16 +229,16 @@ attrType = choice $ map try
     ]
   where
     enumType = nameList
-    notationType = "NOTATION " .*> skipSpace *> nameList
-    nameList = "(" .*> skipSpace *>
-               (nameSS `sepBy1` ("|" .*> skipSpace)) <*. ")"
+    notationType = "NOTATION" .*> ws *> skipWS *> nameList
+    nameList = "(" .*> skipWS *>
+               (nameSS `sepBy1` ("|" .*> skipWS)) <*. ")"
 
 -- | Parse a default value specification for an attribute.
 attrDefault :: Parser AttrDefault
 attrDefault = choice $ map try
     [ "#REQUIRED" .*> pure AttrRequired
     , "#IMPLIED"  .*> pure AttrImplied
-    , AttrFixed <$> ("#FIXED " .*> skipSpace *> quoted)
+    , AttrFixed <$> ("#FIXED" .*> ws *> skipWS *> quoted)
     ] ++
     [ AttrDefaultValue <$> quoted
     ]
@@ -251,7 +252,7 @@ quoted = quotedWith '"' <|> quotedWith '\''
 -- | Parse a declaration of a notation.
 notation :: Parser Notation
 notation = Notation <$>
-  ("<!NOTATION " .*> skipSpace *> nameSS) <* space <* skipSpace <*>
+  ("<!NOTATION" .*> ws *> skipWS *> name) <* ws <* skipWS <*>
   notationSrc <*. ">"
 
 -- | Parse a source for a notation.
@@ -259,19 +260,19 @@ notationSrc :: Parser NotationSource
 notationSrc = try system <|> public
   where
     system = NotationSysID <$>
-      ("SYSTEM " .*> skipSpace *> quoted <* space <* skipSpace)
+      ("SYSTEM" .*> ws *> skipWS *> quoted <* ws <* skipWS)
     public = mkPublic <$>
-      ("PUBLIC " .*> skipSpace *> quoted) <*>
-      optional (try $ space *> skipSpace *> quoted) <* skipSpace
+      ("PUBLIC" .*> ws *> skipWS *> quoted) <*>
+      optional (try $ ws *> skipWS *> quoted) <* skipWS
     mkPublic pubID = maybe (NotationPubID pubID) (NotationPubSysID pubID)
 
 -- | Parse an external ID.
 externalID :: Parser ExternalID
 externalID = try system <|> public
   where
-    system = SystemID <$> ("SYSTEM " .*> skipSpace *> quoted)
-    public = PublicID <$> ("PUBLIC " .*> skipSpace *> quoted) <*
-                          space <* skipSpace <*> quoted
+    system = SystemID <$> ("SYSTEM" .*> ws *> skipWS *> quoted)
+    public = PublicID <$> ("PUBLIC" .*> ws *> skipWS *> quoted) <*
+                          ws <* skipWS <*> quoted
 
 -- | Parse a comment
 comment :: Parser Text
@@ -279,6 +280,18 @@ comment = "<!--" .*> (T.concat . concat <$> manyTillS chunk "--") <*. ">"
   where
     chunk = list2 . T.singleton <$> anyChar <*> takeTill (== '-')
     list2 x y = [x, y]
+
+-- | Definition of white space characters, from the XML specification.
+isXMLSpace :: Char -> Bool
+isXMLSpace = (`elem` "\x20\x9\xD\xA")
+
+-- | Parse one character of white space.
+ws :: Parser Char
+ws = satisfy isXMLSpace
+
+-- | Skip zero or more characters of white space
+skipWS :: Parser ()
+skipWS = A.takeWhile isXMLSpace *> pure ()
 
 -- | Type-specialized version of manyTill, so we can use the 'IsString'
 -- instance for 'Parser' 'Text' with it.
