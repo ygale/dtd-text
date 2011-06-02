@@ -71,7 +71,7 @@ import qualified Data.Text as T
 -- | Parse a 'DTD', possibly preceded by white space.
 parseDTD :: Parser DTD
 parseDTD = DTD <$> (skipSpace *> optional (try textDecl <* skipSpace)) <*>
-                   many dtdComponent
+                   many (dtdComponent <* skipSpace)
 
 -- | Parse an @?xml@ text declaration at the beginning of a 'DTD'.
 textDecl :: Parser DTDTextDecl
