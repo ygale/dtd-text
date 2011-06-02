@@ -139,7 +139,7 @@ name :: Parser Text
 name = nonNull $ takeTill notNameChar
   where
     notNameChar c = isSpace c || c `elem` syntaxChars
-    syntaxChars = "()[]<>!%&;'\"?*+|,"
+    syntaxChars = "()[]<>!%&;'\"?*+|,="
     nonNull parser = do
       text <- parser
       guard . not . T.null $ text
