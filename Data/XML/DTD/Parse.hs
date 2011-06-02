@@ -80,7 +80,7 @@ textDecl = do
     enc1 <- optional $ try encoding
     ver  <- optional $ try (maybeSpace version enc1)
     enc  <- maybe (maybeSpace encoding ver) return enc1
-    "?>" .*> pure (DTDTextDecl ver enc)
+    skipSpace *> "?>" .*> pure (DTDTextDecl ver enc)
   where
     xml = ("X" <|> "x") .*> ("M" <|> "m") .*> ("L" <|> "l")
     version = attr "version" versionNum
