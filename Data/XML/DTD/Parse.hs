@@ -83,11 +83,12 @@ textDecl = do
     skipSpace *> "?>" .*> pure (DTDTextDecl ver enc)
   where
     xml = ("X" <|> "x") .*> ("M" <|> "m") .*> ("L" <|> "l")
-    version = attr "version" versionNum
+    version = attr "version" $ const versionNum
     versionNum = T.append <$> "1." <*> (T.singleton <$> digit)
-    encoding = attr "encoding" $ takeTill (== '"')
-    attr name val = name .*> skipSpace *> "=" .*> skipSpace *>
-                    "\"" .*> val <*. "\""
+    encoding = attr "encoding" $ takeTill . (==)
+    attr name val = try (attrQ '"' name val) <|> attrQ '\'' name val
+    attrQ q name val = name .*> skipSpace *> "=" .*> skipSpace *>
+                       char q *> val q <* char q
     maybeSpace p = maybe p (const $ space *> skipSpace *> p)
 
 -- | Parse a single component of a 'DTD'. Conditional sections are
