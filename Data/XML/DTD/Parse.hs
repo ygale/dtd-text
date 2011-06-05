@@ -116,7 +116,6 @@ instruction = Instruction <$> ("<?" .*> skipWS *> nameSS) <*>
     -- begin with '?'.
     idata = T.concat . concat <$> manyTillS chunk "?>"
     chunk = list2 . T.singleton <$> anyChar <*> takeTill (== '?')
-    list2 x y = [x, y]
 
 -- | Parse an entity declaration.
 entityDecl :: Parser EntityDecl
@@ -282,7 +281,6 @@ comment :: Parser Text
 comment = "<!--" .*> (T.concat . concat <$> manyTillS chunk "--") <*. ">"
   where
     chunk = list2 . T.singleton <$> anyChar <*> takeTill (== '-')
-    list2 x y = [x, y]
 
 -- | Definition of white space characters, from the XML specification.
 isXMLSpace :: Char -> Bool
@@ -300,3 +298,7 @@ skipWS = A.takeWhile isXMLSpace *> pure ()
 -- instance for 'Parser' 'Text' with it.
 manyTillS :: Parser a -> Parser Text -> Parser [a]
 manyTillS = manyTill
+
+ -- | Create a two-element list.
+list2 :: a -> a -> [a]
+list2 x y = [x, y]
