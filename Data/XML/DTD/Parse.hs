@@ -38,10 +38,10 @@ module Data.XML.DTD.Parse
   , repeatChar
 
     -- * Attribute declarations
-  , attrList
-  , attrDecl
-  , attrType
-  , attrDefault
+  , attList
+  , attDecl
+  , attType
+  , attDefault
 
     -- * Declarations of comments and processing instructions
   , instruction
@@ -99,7 +99,7 @@ dtdComponent = choice $ map try
   [ DTDPERef       <$> pERef
   , DTDEntityDecl  <$> entityDecl
   , DTDElementDecl <$> elementDecl
-  , DTDAttrList    <$> attrList
+  , DTDAttList    <$> attList
   , DTDNotation    <$> notation
   , DTDInstruction <$> instruction
   ] ++ -- no try needed for last choice
@@ -152,7 +152,7 @@ nameSS = name <* skipWS
 
 -- | Parse an entity value. An entity value is a quoted string
 -- possibly containing parameter entity references.
-entityValue :: Parser [EntityContent]
+entityValue :: Parser [EntityValue]
 entityValue = try (quotedVal '"') <|> quotedVal '\''
   where
     quotedVal q = char q *> manyTill content (char q)
@@ -203,29 +203,29 @@ repeatChar = choice
   ]
 
 -- | Parse a list of attribute declarations for an element.
-attrList :: Parser AttrList
-attrList = AttrList <$> ("<!ATTLIST" .*> ws *> skipWS *> nameSS) <*>
-                        many attrDecl <*. ">"
+attList :: Parser AttList
+attList = AttList <$> ("<!ATTLIST" .*> ws *> skipWS *> nameSS) <*>
+                       many attDecl <*. ">"
 
 -- | Parse the three-part declaration of an attribute.
-attrDecl :: Parser AttrDecl
-attrDecl = AttrDecl <$>
-           nameSS <*> attrType <* skipWS <*> attrDefault <* skipWS
+attDecl :: Parser AttDecl
+attDecl = AttDecl <$>
+           nameSS <*> attType <* skipWS <*> attDefault <* skipWS
 
 -- | Parse the type of an attribute.
-attrType :: Parser AttrType
-attrType = choice $ map try
-    [ "CDATA"    .*> pure AttrStringType
-    , "ID"       .*> pure AttrIDType
-    , "IDREF"    .*> pure AttrIDRefType
-    , "IDREFS"   .*> pure AttrIDRefsType
-    , "ENTITY"   .*> pure AttrEntityType
-    , "ENTITIES" .*> pure AttrEntitiesType
-    , "NMTOKEN"  .*> pure AttrNmTokenType
-    , "NMTOKENS" .*> pure AttrNmTokensType
-    ,  AttrEnumType <$> try enumType
+attType :: Parser AttType
+attType = choice $ map try
+    [ "CDATA"    .*> pure AttStringType
+    , "ID"       .*> pure AttIDType
+    , "IDREF"    .*> pure AttIDRefType
+    , "IDREFS"   .*> pure AttIDRefsType
+    , "ENTITY"   .*> pure AttEntityType
+    , "ENTITIES" .*> pure AttEntitiesType
+    , "NMTOKEN"  .*> pure AttNmTokenType
+    , "NMTOKENS" .*> pure AttNmTokensType
+    ,  AttEnumType <$> try enumType
     ] ++
-    [ AttrNotationType <$> notationType
+    [ AttNotationType <$> notationType
     ]
   where
     enumType = nameList
@@ -234,13 +234,13 @@ attrType = choice $ map try
                (nameSS `sepBy1` ("|" .*> skipWS)) <*. ")"
 
 -- | Parse a default value specification for an attribute.
-attrDefault :: Parser AttrDefault
-attrDefault = choice $ map try
-    [ "#REQUIRED" .*> pure AttrRequired
-    , "#IMPLIED"  .*> pure AttrImplied
-    , AttrFixed <$> ("#FIXED" .*> ws *> skipWS *> quoted)
+attDefault :: Parser AttDefault
+attDefault = choice $ map try
+    [ "#REQUIRED" .*> pure AttRequired
+    , "#IMPLIED"  .*> pure AttImplied
+    , AttFixed <$> ("#FIXED" .*> ws *> skipWS *> quoted)
     ] ++
-    [ AttrDefaultValue <$> quoted
+    [ AttDefaultValue <$> quoted
     ]
 
 -- | A single-quoted or double-quoted string.
