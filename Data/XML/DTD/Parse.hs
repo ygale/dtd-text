@@ -111,6 +111,9 @@ instruction :: Parser Instruction
 instruction = Instruction <$> ("<?" .*> skipWS *> nameSS) <*>
                               idata <*. "?>"
   where
+    -- Break the content into chunks beginning with '?' so we
+    -- can find the '?>' at the end. The first chunk might not
+    -- begin with '?'.
     idata = T.concat . concat <$> manyTillS chunk "?>"
     chunk = list2 . T.singleton <$> anyChar <*> takeTill (== '?')
     list2 x y = [x, y]
