@@ -19,8 +19,12 @@ with this file.
 -}
 
 module Data.XML.DTD.Parse
-  ( -- * DTD structure
+  ( -- * Parsing a DTD
     parseDTD
+  , parseDTDWithExtern
+  , SymTable
+
+    -- * Top-level DTD structure
   , textDecl
   , dtdComponent
 
@@ -61,6 +65,7 @@ import Data.XML.Types (ExternalID(PublicID, SystemID),
 import Data.Attoparsec.Text (Parser, try, satisfy, takeTill,
   anyChar, char, digit, (<*.), (.*>))
 import qualified Data.Attoparsec.Text as A -- for takeWhile
+import Data.Attoparsec.Text.Lazy (parse, Result(Done, Fail), maybeResult)
 import Data.Attoparsec.Combinator (many, manyTill, choice, sepBy1)
 import Data.Functor ((<$>))
 import Control.Applicative (pure, optional, (<*>), (<*), (*>), (<|>))
@@ -68,11 +73,180 @@ import Control.Monad (guard)
 import Data.Text (Text)
 import Data.Char (isSpace)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as L
+import qualified Data.Map as M
+import Data.Maybe (fromMaybe, catMaybes)
+import Data.List (groupBy)
 
--- | Parse a 'DTD', possibly preceded by white space.
-parseDTD :: Parser DTD
-parseDTD = DTD <$> (skipWS *> optional (try textDecl <* skipWS)) <*>
-                   many (dtdComponent <* skipWS)
+-- | Parse a DTD. If the syntax of the DTD is invalid, all
+-- declarations up to the first invalid one are returned.
+parseDTD :: L.Text -> DTD
+parseDTD = parseDTDWithExtern M.empty
+
+-- | Parse a DTD using the given table of values for external
+-- parameter entities.
+--
+-- If you need information from the DTD itself to look up the external
+-- entities, such as system and public IDs, you might be able to get
+-- the information by applying 'parseDTD' to the DTD or part of it for
+-- an initial parse.
+parseDTDWithExtern :: SymTable -> L.Text -> DTD
+parseDTDWithExtern ext = continue . parse (skipWS *> textDecl <* skipWS)
+  where
+    continue (Done inp decl) = DTD (Just decl) $ parseCmps ext M.empty inp
+    continue (Fail inp _ _)  = DTD Nothing     $ parseCmps ext M.empty inp
+
+-- | A pre-parsed component of the DTD. Pre-parsing separates
+-- components that need parameter entity replacement from those that
+-- do not.
+data PreParse =
+     PPERef PERef
+   | PInstruction Instruction
+   | PComment Text
+   | PMarkup [MarkupText]
+  deriving (Eq, Show)
+
+-- | Markup text is interspersed quoted 'Text, unquoted 'Text', and
+-- parameter entity references.
+data MarkupText = MTUnquoted Text | MTQuoted Text | MTPERef PERef
+  deriving (Eq, Show)
+
+-- | A symbol table for internal parameter entity resolution. A symbol
+-- can be marked as defined without a value. That allows us to attempt
+-- to produce a useful parse even when some information is missing,
+-- e.g., when there are undefined external parameter entities.
+type IntSymTable = M.Map Text (Maybe [EntityValue])
+
+-- | A symbol table for external parameter entity resolution.
+type SymTable = M.Map Text L.Text
+
+-- | Parse the components of a DTD, given the current symbol table of
+-- parameter entities.
+parseCmps :: SymTable -> IntSymTable -> L.Text -> [DTDComponent]
+parseCmps ext int = handlePre . parse (preparse <* skipWS)
+  where
+    handlePre (Done c (PPERef r)) = parseCmps ext int . L.concat $
+      map L.fromStrict (renderPERef int r) ++ [c]
+    handlePre (Done c (PComment t)) = DTDComment t : parseCmps ext int c
+    handlePre (Done c (PInstruction i)) = DTDInstruction i :
+                                          parseCmps ext int c
+    handlePre (Done c (PMarkup m)) = handleMarkup ext int c m
+
+-- | Pre-parse a single DTD component at the beginning of the current
+-- input text. Pre-parsing separates components that need parameter
+-- entity replacement from those that do not.
+preparse :: Parser PreParse
+preparse = choice
+    [ PPERef       <$> try pERef
+    , PInstruction <$> try instruction
+    , PComment     <$> try comment
+    , PMarkup      <$> markup
+    ]
+
+-- | Pre-parse a markup declaration. We match only the opening and
+-- closign pointy brackets, and break the text into quoted and
+-- unquoted sub-texts. For quoted sub-texts, the quote marks are
+-- dropped.
+markup :: Parser [MarkupText]
+markup = mkMarkup <$>
+    ("<" .*> unquoted) <*>
+    manyTillS ((:) . MTQuoted <$> try quoted <*> unquoted) ">"
+  where
+    unquoted = chunk2 <$> unqText <*> many (list2 <$> pct <*> unqText)
+    unqText = MTUnquoted <$> takeTill (`elem` "%>'\"")
+    pct = "%" .*> (MTUnquoted <$> (ws *> pure "% ") <|>
+                   MTPERef <$> takeTill (== ';') <*. ";")
+    mkMarkup ts tss = wrap . concat $ ts : tss
+    wrap = (MTUnquoted "<" :) . (++ [MTUnquoted ">"])
+    chunk2 x xss = x : concat xss
+
+-- | To handle a pre-parsed component that is markup declaration, we
+-- resolve parameter entities where necessary, parse it as a
+-- component, and possibly update the internal symbol table.
+handleMarkup :: SymTable -> IntSymTable -> L.Text -> [MarkupText] ->
+                [DTDComponent]
+handleMarkup ext int cont =
+    handleCmp . parse dtdComponent . L.fromStrict . renderMarkup int
+  where
+    handleCmp (Done _ (DTDEntityDecl e)) = handleEntity ext int cont e
+    handleCmp (Done _ cmp)               = cmp : parseCmps ext int cont
+    handleCmp _                          = []
+
+-- | Render pre-parsed markup as text, resolving parameter entities as
+-- needed.
+renderMarkup :: IntSymTable -> [MarkupText] -> Text
+renderMarkup syms = T.concat . concatMap render
+  where
+    render (MTQuoted t)   = ["\"", t, "\""]
+    render (MTUnquoted t) = [t]
+    render (MTPERef  r)   = renderPERef syms r
+
+-- | Finsh processing an entity declaration by resolving parameter
+-- entity references in its value if it is internal, and updating the
+-- internal symbol table if it is a parameter entity declaration. We
+-- allow re-declaration of parameter entities, although that is
+-- forbidded by the XML spec, but we ignore the new declaration.
+handleEntity :: SymTable -> IntSymTable -> L.Text -> EntityDecl ->
+                [DTDComponent]
+handleEntity ext int cont e = DTDEntityDecl e' : parseCmps ext int' cont
+  where
+    (e', int') = case e of
+      InternalGeneralEntityDecl   n val -> ige n val
+      InternalParameterEntityDecl n val -> ipe n val
+      ExternalParameterEntityDecl n _   -> epe n
+      other                             -> (other, int)
+    ige n v = (InternalGeneralEntityDecl n $ resolveValue int n v, int)
+    ipe n v = let v' = resolveValue int n v
+              in (InternalParameterEntityDecl n v',
+                  M.insertWith (const id) n (Just v') int)
+    epe n = (e, M.insertWith (const id) n (resolveEPE n <$> M.lookup n ext) int)
+    resolveEPE n =
+      resolveValue int n . fromMaybe [] . maybeResult . parse parseEPE
+    parseEPE = many $
+      EntityPERef <$> try pERef <|> EntityText <$> takeTill (== '%')
+
+-- | Resolve nested parameter entity references in the value string
+-- for a parameter entity declaration. Make sure that the name of
+-- entity being declared does not appear recursively in its
+-- definition.
+resolveValue :: IntSymTable -> Text -> [EntityValue] -> [EntityValue]
+resolveValue syms name = coalesce . map noRecursion . concatMap resolve
+  where
+    resolve e@(EntityPERef r) = fromMaybe [e] . fromMaybe Nothing $
+                                M.lookup r syms
+    resolve e                 = [e]
+
+    noRecursion (EntityPERef r) | r == name = EntityText $ T.append "ERR" name
+    noRecursion e                           = e
+
+    coalesce = concatMap combine . groupBy bothText
+    bothText (EntityText {}) (EntityText {}) = True
+    bothText _               _               = False
+    combine es@(EntityText {}:_) = [EntityText . T.concat . catMaybes $
+                                    map justText es]
+    combine es                   = es
+    justText (EntityText t) = Just t
+    justText e              = Nothing
+
+-- | Render a parameter entity reference (which is not inside a quoted
+-- value string in an entity declaration) as 'Text'. Render nested PEs
+-- whose value is not known as textual PE refs. Insert a space before
+-- and after the replacement text, as per the XML specification.
+renderPERef :: IntSymTable -> PERef -> [Text]
+renderPERef syms ref = maybe [pERefText ref] render . fromMaybe Nothing $
+                       M.lookup ref syms
+  where
+    render = (" " :) . (++ [" "]) . map renderValue
+
+-- | Render an 'EntityValue' as 'Text', assuming that all known
+-- parameter entity references have already been resolved.
+renderValue :: EntityValue -> Text
+renderValue (EntityText  t) = t
+renderValue (EntityPERef r) = pERefText r
+
+-- | Render an unresolved parameter entity as 'Text'.
+pERefText :: PERef -> Text
+pERefText r = T.concat ["%", r, ";"]
 
 -- | Parse an @?xml@ text declaration at the beginning of a 'DTD'.
 textDecl :: Parser DTDTextDecl
