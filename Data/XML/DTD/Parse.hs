@@ -157,9 +157,9 @@ nameSS = name <* skipWS
 entityValue :: Parser [EntityValue]
 entityValue = try (quotedVal '"') <|> quotedVal '\''
   where
-    quotedVal q = char q *> manyTill content (char q)
-    content =  EntityPERef <$> try pERef <|> EntityText <$> text
-    text = takeTill $ \c -> c == '%' || c == '"'
+    quotedVal q = char q *> manyTill (content q) (char q)
+    content q =  EntityPERef <$> try pERef <|> EntityText <$> text q
+    text q = takeTill $ \c -> c == '%' || c == q
 
 -- | Parse a parameter entity reference
 pERef :: Parser PERef
@@ -245,7 +245,8 @@ attDefault = choice $ map try
     [ AttDefaultValue <$> quoted
     ]
 
--- | A single-quoted or double-quoted string.
+-- | A single-quoted or double-quoted string. The quotation marks are
+-- dropped.
 quoted :: Parser Text
 quoted = quotedWith '"' <|> quotedWith '\''
   where
