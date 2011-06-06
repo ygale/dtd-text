@@ -8,7 +8,8 @@
 -- Portability :  portable
 --
 -- This module provides a "Data.Attoparsec.Text" parser for XML
--- Document Type Declaration (DTD) documents.
+-- Document Type Declaration (DTD) documents. A higher-level interface
+-- that implements parameter entity resolution is also provided.
 
 {-
 Copyright (c) 2011 Suite Solutions Ltd., Israel. All rights reserved.
@@ -20,7 +21,8 @@ with this file.
 
 module Data.XML.DTD.Parse
   ( -- * Parsing a DTD
-    parseDTD
+    dtd
+  , parseDTD
   , parseDTDWithExtern
   , SymTable
 
@@ -78,12 +80,15 @@ import qualified Data.Map as M
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.List (groupBy)
 
--- | Parse a DTD. If the syntax of the DTD is invalid, all
--- declarations up to the first invalid one are returned.
+-- | Parse a DTD while fully resolving the values of all parameter
+-- entities whose values are provided internally in the DTD. If the
+-- syntax of the DTD is invalid, all declarations up to the first
+-- invalid one are returned.
 parseDTD :: L.Text -> DTD
 parseDTD = parseDTDWithExtern M.empty
 
--- | Parse a DTD using the given table of values for external
+-- | Parse a DTD while fully resolving the values of parameter
+-- entities. The given table of values is used to resolve external
 -- parameter entities.
 --
 -- If you need information from the DTD itself to look up the external
@@ -248,6 +253,14 @@ renderValue (EntityPERef r) = pERefText r
 pERefText :: PERef -> Text
 pERefText r = T.concat ["%", r, ";"]
 
+-- | Parse a DTD. Parameter entity substitution is not supported by
+-- this parser, so parameter entities cannot appear in places where a
+-- valid DTD syntax production cannot be determined without resolving
+-- them.
+dtd :: Parser DTD
+dtd = DTD <$> (skipWS *> optional (textDecl <* skipWS)) <*>
+      many (dtdComponent <* skipWS)
+
 -- | Parse an @?xml@ text declaration at the beginning of a 'DTD'.
 textDecl :: Parser DTDTextDecl
 textDecl = do
@@ -273,7 +286,7 @@ dtdComponent = choice $ map try
   [ DTDPERef       <$> pERef
   , DTDEntityDecl  <$> entityDecl
   , DTDElementDecl <$> elementDecl
-  , DTDAttList    <$> attList
+  , DTDAttList     <$> attList
   , DTDNotation    <$> notation
   , DTDInstruction <$> instruction
   ] ++ -- no try needed for last choice
