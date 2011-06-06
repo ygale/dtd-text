@@ -29,8 +29,8 @@ library
     , xml-types ==0.3.*
     , attoparsec ==0.8.*
     , attoparsec-text ==0.8.*
---    , blaze-builder ==0.3.*
+    , blaze-builder ==0.3.*
 
   exposed-modules:
     Data.XML.DTD.Parse
---    Data.XML.DTD.Render
+    Data.XML.DTD.Render
