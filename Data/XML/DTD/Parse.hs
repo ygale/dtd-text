@@ -405,15 +405,18 @@ attDecl = AttDecl <$>
 -- | Parse the type of an attribute.
 attType :: Parser AttType
 attType = choice $ map try
-    [ "CDATA"    .*> pure AttStringType
-    , "ID"       .*> pure AttIDType
-    , "IDREF"    .*> pure AttIDRefType
-    , "IDREFS"   .*> pure AttIDRefsType
-    , "ENTITY"   .*> pure AttEntityType
-    , "ENTITIES" .*> pure AttEntitiesType
-    , "NMTOKEN"  .*> pure AttNmTokenType
-    , "NMTOKENS" .*> pure AttNmTokensType
-    ,  AttEnumType <$> try enumType
+    -- The ws is required by the spec, and needed by the parser to be
+    -- able to distinguish between ID and IDREF, and NMTOKEN and
+    -- NMTOKENS.
+    [ "CDATA"    .*> ws *> pure AttStringType
+    , "ID"       .*> ws *> pure AttIDType
+    , "IDREF"    .*> ws *> pure AttIDRefType
+    , "IDREFS"   .*> ws *> pure AttIDRefsType
+    , "ENTITY"   .*> ws *> pure AttEntityType
+    , "ENTITIES" .*> ws *> pure AttEntitiesType
+    , "NMTOKEN"  .*> ws *> pure AttNmTokenType
+    , "NMTOKENS" .*> ws *> pure AttNmTokensType
+    ,  AttEnumType <$> enumType
     ] ++
     [ AttNotationType <$> notationType
     ]
