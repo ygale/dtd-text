@@ -122,13 +122,13 @@ buildDTDTextDecl (DTDTextDecl ver enc) = fromText "<?xml " <>
 
 -- | A 'Builder' for a 'DTDComponent'.
 buildDTDComponent :: DTDComponent -> Builder
-buildDTDComponent (DTDEntityDecl d)  = buildEntityDecl d  <> newline
-buildDTDComponent (DTDElementDecl d) = buildElementDecl d <> newline
-buildDTDComponent (DTDAttList a)     = buildAttList a     <> newline
-buildDTDComponent (DTDNotation n)    = buildNotation n    <> newline
-buildDTDComponent (DTDPERef r)       = buildPERef r       <> newline
-buildDTDComponent (DTDInstruction i) = buildInstruction i <> newline
-buildDTDComponent (DTDComment c)     = buildComment c     <> newline
+buildDTDComponent (DTDEntityDecl d)  = buildEntityDecl d
+buildDTDComponent (DTDElementDecl d) = buildElementDecl d
+buildDTDComponent (DTDAttList a)     = buildAttList a
+buildDTDComponent (DTDNotation n)    = buildNotation n
+buildDTDComponent (DTDPERef r)       = buildPERef r
+buildDTDComponent (DTDInstruction i) = buildInstruction i
+buildDTDComponent (DTDComment c)     = buildComment c
 
 -- | A 'Builder' for an 'EntityDecl'.
 buildEntityDecl :: EntityDecl -> Builder
