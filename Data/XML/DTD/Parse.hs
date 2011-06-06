@@ -136,6 +136,7 @@ parseCmps ext int = handlePre . parse (preparse <* skipWS)
     handlePre (Done c (PInstruction i)) = DTDInstruction i :
                                           parseCmps ext int c
     handlePre (Done c (PMarkup m)) = handleMarkup ext int c m
+    handlePre _ = []
 
 -- | Pre-parse a single DTD component at the beginning of the current
 -- input text. Pre-parsing separates components that need parameter
