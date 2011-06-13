@@ -8,7 +8,6 @@ license: BSD3
 license-file: license.txt
 author: Yitzchak Gale
 maintainer: gale@sefer.org
-category: Data, Text, XML
 build-type: Simple
 cabal-version: >=1.6
 category: Data, Text, XML, Parsing
