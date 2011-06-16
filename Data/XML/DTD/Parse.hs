@@ -491,6 +491,6 @@ skipWS = A.takeWhile isXMLSpace *> pure ()
 manyTillS :: Parser a -> Parser Text -> Parser [a]
 manyTillS = manyTill
 
- -- | Create a two-element list.
+-- | Create a two-element list.
 list2 :: a -> a -> [a]
 list2 x y = [x, y]
