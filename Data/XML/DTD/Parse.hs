@@ -71,7 +71,7 @@ import Data.Attoparsec.Text.Lazy (parse, Result(Done, Fail), maybeResult)
 import Data.Attoparsec.Combinator (many, manyTill, choice, sepBy1)
 import Data.Functor ((<$>))
 import Control.Applicative (pure, optional, (<*>), (<*), (*>), (<|>))
-import Control.Monad (guard)
+import Control.Monad (guard, join)
 import Data.Text (Text)
 import Data.Char (isSpace)
 import qualified Data.Text as T
@@ -130,13 +130,26 @@ type SymTable = M.Map Text L.Text
 parseCmps :: SymTable -> IntSymTable -> L.Text -> [DTDComponent]
 parseCmps ext int = handlePre . parse (preparse <* skipWS)
   where
-    handlePre (Done c (PPERef r)) = parseCmps ext int . L.concat $
-      map L.fromStrict (renderPERef int r) ++ [c]
+    handlePre (Done c (PPERef r)) = handlePERef ext int c r
     handlePre (Done c (PComment t)) = DTDComment t : parseCmps ext int c
     handlePre (Done c (PInstruction i)) = DTDInstruction i :
                                           parseCmps ext int c
     handlePre (Done c (PMarkup m)) = handleMarkup ext int c m
     handlePre _ = []
+
+-- | To handle a pre-parsed parameter entity reference, try to resolve
+-- it. If it resolves, push the resolved text back into the input
+-- stream and rescan. Otherwise, just drop it into the output as is
+-- and move on.
+handlePERef :: SymTable -> IntSymTable -> L.Text -> Text -> [DTDComponent]
+handlePERef ext int cont name = maybe moveOn rescan refVal
+  where
+    moveOn = DTDPERef name : parseCmps ext int cont
+    rescan = (++ parseCmps ext int cont) .
+             parseCmps ext intNoRecurse .
+             L.concat . map (L.fromStrict . renderValue)
+    refVal = join $ M.lookup name int
+    intNoRecurse = M.insert name Nothing int
 
 -- | Pre-parse a single DTD component at the beginning of the current
 -- input text. Pre-parsing separates components that need parameter
