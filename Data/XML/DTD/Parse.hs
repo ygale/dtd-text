@@ -116,10 +116,7 @@ data PreParse =
 data MarkupText = MTUnquoted Text | MTQuoted Text | MTPERef PERef
   deriving (Eq, Show)
 
--- | A symbol table for internal parameter entity resolution. A symbol
--- can be marked as defined without a value. That allows us to attempt
--- to produce a useful parse even when some information is missing,
--- e.g., when there are undefined external parameter entities.
+-- | A symbol table for internal parameter entity resolution.
 type IntSymTable = M.Map Text (Maybe [EntityValue])
 
 -- | A symbol table for external parameter entity resolution.  The
@@ -182,7 +179,10 @@ handleMarkup ext int cont =
     handleCmp _                          = []
 
 -- | Render pre-parsed markup as text, resolving parameter entities as
--- needed.
+-- needed. Note that parameter entities inside quoted strings are not
+-- resolved here; if later we recognize that the string is the value
+-- being asigned to an entity in an entity declaration, we will
+-- resolve the parameter then.
 renderMarkup :: IntSymTable -> [MarkupText] -> Text
 renderMarkup syms = T.concat . concatMap render
   where
@@ -194,7 +194,8 @@ renderMarkup syms = T.concat . concatMap render
 -- entity references in its value if it is internal, and updating the
 -- internal symbol table if it is a parameter entity declaration. We
 -- allow re-declaration of parameter entities, although that is
--- forbidded by the XML spec, but we ignore the new declaration.
+-- forbidden by the XML spec, but we ignore the new declaration when
+-- resolving parameter entities.
 handleEntity :: SymTable -> IntSymTable -> L.Text -> EntityDecl ->
                 [DTDComponent]
 handleEntity ext int cont e = DTDEntityDecl e' : parseCmps ext int' cont
