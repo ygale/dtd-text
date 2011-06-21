@@ -80,16 +80,16 @@ import qualified Data.Map as M
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.List (groupBy)
 
--- | Parse a DTD while fully resolving the values of all parameter
--- entities whose values are provided internally in the DTD. If the
--- syntax of the DTD is invalid, all declarations up to the first
--- invalid one are returned.
+-- | Parse a DTD from lazy 'L.Text' while fully resolving the values
+-- of all parameter entities whose values are provided internally in
+-- the DTD. If the syntax of the DTD is invalid, all declarations up
+-- to the first invalid one are returned.
 parseDTD :: L.Text -> DTD
 parseDTD = parseDTDWithExtern M.empty
 
--- | Parse a DTD while fully resolving the values of parameter
--- entities. The given table of values is used to resolve external
--- parameter entities.
+-- | Parse a DTD from lazy 'L.Text' while fully resolving the values
+-- of parameter entities. The given table of values is used to resolve
+-- external parameter entities.
 --
 -- If you need information from the DTD itself to look up the external
 -- entities, such as system and public IDs, you might be able to get
@@ -122,7 +122,10 @@ data MarkupText = MTUnquoted Text | MTQuoted Text | MTPERef PERef
 -- e.g., when there are undefined external parameter entities.
 type IntSymTable = M.Map Text (Maybe [EntityValue])
 
--- | A symbol table for external parameter entity resolution.
+-- | A symbol table for external parameter entity resolution.  The
+-- symbol table maps strict 'Text' names to lazy 'L.Text' values.
+-- Typically, the values will have been retrieved from an external
+-- resource such as a file or URL.
 type SymTable = M.Map Text L.Text
 
 -- | Parse the components of a DTD, given the current symbol table of
