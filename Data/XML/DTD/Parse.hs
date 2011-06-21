@@ -111,7 +111,7 @@ data PreParse =
    | PMarkup [MarkupText]
   deriving (Eq, Show)
 
--- | Markup text is interspersed quoted 'Text, unquoted 'Text', and
+-- | Markup text is interspersed quoted 'Text', unquoted 'Text', and
 -- parameter entity references.
 data MarkupText = MTUnquoted Text | MTQuoted Text | MTPERef PERef
   deriving (Eq, Show)
