@@ -218,45 +218,40 @@ handleEntity ext int cont e = DTDEntityDecl e' : parseCmps ext int' cont
       InternalParameterEntityDecl n val -> ipe n val
       ExternalParameterEntityDecl n _   -> epe n
       other                             -> (other, int)
-    ige n v = (InternalGeneralEntityDecl n $ resolveValue int n v, int)
-    ipe n v = let v' = resolveValue int n v
-              in (InternalParameterEntityDecl n v',
-                  M.insertWith (const id) n (Just v') int)
-    epe n = (e, M.insertWith (const id) n (resolveEPE n <$> M.lookup n ext) int)
-    resolveEPE n =
-      resolveValue int n . fromMaybe [] . maybeResult . parse parseEPE
+    ige n v = (InternalGeneralEntityDecl n $ resolveValue int v, int)
+    ipe n v = let v' = resolveValue int v
+              in (InternalParameterEntityDecl n v', insertPE n v')
+    epe n = (e, maybe int (insertPE n) $ resolveEPE n)
+    insertPE n v = M.insertWith (const id) n (Just v) int
+    resolveEPE n = fmap (resolveValue int) $
+                   M.lookup n ext >>= maybeResult . parse parseEPE
     parseEPE = many $
       EntityPERef <$> try pERef <|> EntityText <$> takeTill (== '%')
 
 -- | Resolve nested parameter entity references in the value string
--- for a parameter entity declaration. Make sure that the name of
--- entity being declared does not appear recursively in its
--- definition.
-resolveValue :: IntSymTable -> Text -> [EntityValue] -> [EntityValue]
-resolveValue syms name = coalesce . map noRecursion . concatMap resolve
+-- for an entity declaration.
+resolveValue :: IntSymTable -> [EntityValue] -> [EntityValue]
+resolveValue syms = concatMap combine . groupBy bothText . concatMap resolve
   where
-    resolve e@(EntityPERef r) = fromMaybe [e] . fromMaybe Nothing $
-                                M.lookup r syms
+    resolve e@(EntityPERef r) = fromMaybe [e] . join $ M.lookup r syms
     resolve e                 = [e]
 
-    noRecursion (EntityPERef r) | r == name = EntityText $ T.append "ERR" name
-    noRecursion e                           = e
-
-    coalesce = concatMap combine . groupBy bothText
     bothText (EntityText {}) (EntityText {}) = True
     bothText _               _               = False
+
     combine es@(EntityText {}:_) = [EntityText . T.concat . catMaybes $
                                     map justText es]
     combine es                   = es
+
     justText (EntityText t) = Just t
-    justText e              = Nothing
+    justText _              = Nothing
 
 -- | Render a parameter entity reference (which is not inside a quoted
 -- value string in an entity declaration) as 'Text'. Render nested PEs
 -- whose value is not known as textual PE refs. Insert a space before
 -- and after the replacement text, as per the XML specification.
 renderPERef :: IntSymTable -> PERef -> [Text]
-renderPERef syms ref = maybe [pERefText ref] render . fromMaybe Nothing $
+renderPERef syms ref = maybe [pERefText ref] render . join $
                        M.lookup ref syms
   where
     render = (" " :) . (++ [" "]) . map renderValue
