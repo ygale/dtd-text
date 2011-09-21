@@ -26,7 +26,7 @@ library
     , text
     , dtd-types >= 0.3.0.1 && < 1
     , xml-types ==0.3.*
-    , attoparsec ==0.8.*
+    , attoparsec >=0.8.0 && < 0.10
     , attoparsec-text ==0.8.*
     , blaze-builder ==0.3.*
 
