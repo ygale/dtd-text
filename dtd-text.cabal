@@ -13,11 +13,11 @@ cabal-version: >=1.6
 category: Data, Text, XML, Parsing
 stability: experimental
 bug-reports: mailto:gale@sefer.org
-homepage: http://projects.haskell.org/dtd/
+homepage: https://ygale.github.io/dtd
 
 source-repository head
-  type: darcs
-  location: http://code.haskell.org/dtd/dtd-text/
+  type: git
+  location: https://github.com/ygale/dtd-text
 
 library
   build-depends:
